@@ -6,93 +6,90 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>541</width>
-    <height>361</height>
+    <width>793</width>
+    <height>538</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>serviciosIDEE2QGIS</string>
   </property>
-  <widget class="QDialogButtonBox" name="button_box">
-   <property name="geometry">
-    <rect>
-     <x>380</x>
-     <y>330</y>
-     <width>161</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
-  </widget>
-  <widget class="QTableWidget" name="tableWidget">
+  <widget class="QTabWidget" name="tabWidget_WMS">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>20</y>
-     <width>511</width>
-     <height>301</height>
+     <y>10</y>
+     <width>771</width>
+     <height>511</height>
     </rect>
    </property>
-   <column>
-    <property name="text">
-     <string>Añadir a mapa</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Tipo</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Nombre</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Descripción</string>
-    </property>
-   </column>
+   <property name="currentIndex">
+    <number>0</number>
+   </property>
+   <widget class="QWidget" name="WMS">
+    <attribute name="title">
+     <string>WMS</string>
+    </attribute>
+    <widget class="QTableWidget" name="tableWidget_WMS">
+     <property name="geometry">
+      <rect>
+       <x>15</x>
+       <y>51</y>
+       <width>741</width>
+       <height>411</height>
+      </rect>
+     </property>
+     <column>
+      <property name="text">
+       <string>añadir a mapa</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Organismo</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Nombre</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>URL</string>
+      </property>
+     </column>
+    </widget>
+    <widget class="QLineEdit" name="lineEditBuscar">
+     <property name="geometry">
+      <rect>
+       <x>250</x>
+       <y>10</y>
+       <width>501</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QPlainTextEdit" name="plainTextEdit">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>10</y>
+       <width>221</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="plainText">
+      <string>Texto a buscar en descripción:</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QWidget" name="tab_2">
+    <attribute name="title">
+     <string>Tab 2</string>
+    </attribute>
+   </widget>
   </widget>
  </widget>
  <resources/>
- <connections>
-  <connection>
-   <sender>button_box</sender>
-   <signal>accepted()</signal>
-   <receiver>serviciosIDEE2QGISDialogBase</receiver>
-   <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>button_box</sender>
-   <signal>rejected()</signal>
-   <receiver>serviciosIDEE2QGISDialogBase</receiver>
-   <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+ <connections/>
 </ui>
