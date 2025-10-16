@@ -53,8 +53,7 @@ CSW_URL = 'https://www.idee.es/csw-codsi-idee/srv/spa/csw'
 # https://www.idee.es/csw-codsi-idee/srv/spa/csw?request=GetRecords&service=CSW&version=2.0.2&typeNames=csw:Record&resultType=results
 # https://www.idee.es/csw-codsi-idee/srv/spa/csw?request=GetCapabilities&service=CSW&version=2.0.2
 # https://www.idee.es/csw-codsi-idee/srv/spa/catalog.search#/search?isTemplate=n&resourceTemporalDateRange=%7B%22range%22:%7B%22resourceTemporalDateRange%22:%7B%22gte%22:null,%22lte%22:null,%22relation%22:%22intersects%22%7D%7D%7D&sortBy=relevance&sortOrder=&from=1&to=30
-# https://www.idee.es/csw-codsi-idee/srv/spa/csw?request=GetRecords&resultType=results&service=CSW&version=2.0.2&namespace=xmlns(csw=http://www.opengis.net/cat/csw/2.0.2),xmlns(gmd=http://www.isotc211.org/2005/gmd)&typeNames=gmd:MD_Metadata&outputFormat=application/xml&outputSchema=http://www.isotc211.org/2005/gmd&startPosition=1&maxRecords=40&elementSetName=summary&typeNames=csw:Record
-
+# https://www.idee.es/csw-codsi-idee/srv/spa/csw?request=GetRecords&resultType=results&service=CSW&version=2.0.2&typeNames=gmd:MD_Metadata&outputSchema=http://www.isotc211.org/2005/gmd&startPosition=1&maxRecords=40&elementSetName=summary&typeNames=csw:Record
 def get_idee_services(batch_size=50):
     """
     Obtiene todos los servicios del catálogo CSW de la IDEE
