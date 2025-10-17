@@ -116,6 +116,10 @@ class serviciosIDEE2QGIS:
         if self.first_start:
             self.first_start = False
             self.dlg = serviciosIDEE2QGISDialog()
+            # 💡 Aquí conectamos los filtros
+            self.dlg.lineEditBuscar_WMS.textChanged.connect(self.filtrar_tabla_wms)
+            self.dlg.lineEditBuscar_WMTS.textChanged.connect(self.filtrar_tabla_wmts)
+            self.dlg.lineEditBuscar_XYZ.textChanged.connect(self.filtrar_tabla_xyz)
             self.dlg.show()  # Abrir el diálogo inmediatamente
 
             # Crear ProgressDialog
@@ -174,8 +178,13 @@ class serviciosIDEE2QGIS:
                         servicioCap = item.get("capa", "")
                         servicio = item.get("url", "")
                         btn = QPushButton("Añadir a mapa")
+                        obj={
+                            "nombre": nombre,
+                            "capa": servicioCap,
+                            "url": servicio
+                        }
                         tabla.setCellWidget(row, 0, btn)
-                        btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t))
+                        btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t, obj))
                         tabla.setItem(row, 1, QTableWidgetItem(nomOrg))
                         tabla.setItem(row, 2, QTableWidgetItem(nombre))
                         tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
@@ -196,7 +205,9 @@ class serviciosIDEE2QGIS:
                                 rellenarFila(srv3, nombre_org)
 
         # Cerrar el progress si ambos workers han terminado
-        if (not self.worker_wms.isRunning()) and (not self.worker_wmts.isRunning()):
+        if ((not self.worker_xyz.isRunning()) and 
+            (not self.worker_wms.isRunning()) and 
+            (not self.worker_wmts.isRunning())):
             self.progress.close()
 
 
@@ -204,7 +215,7 @@ class serviciosIDEE2QGIS:
     # Método para descargar y rellenar la tabla
     # -------------------------------------------------------------------------
 
-    def anadir_a_mapa(self, servicio, tab):
+    def anadir_a_mapa(self, servicio, tab, obj):
         """
         Función que se ejecuta al pulsar 'Añadir a mapa'.
         Aquí se abre el diálogo de selección de capas WMS y se cargan al mapa.
@@ -231,7 +242,7 @@ class serviciosIDEE2QGIS:
             self.worker.start()
         
         elif tab == "TMSXYZ":
-            pass
+            self._on_capas_cargadas_XYZ(obj, servicio)
 
 
         else:
@@ -327,13 +338,48 @@ class serviciosIDEE2QGIS:
             tabla.setRowHidden(row, not visible)
 
 
+    def _on_capas_cargadas_XYZ(self, obj, servicio):
+        """
+        Se llama cuando el worker ha terminado de obtener las capas XYZ.
+        Carga la capa XYZ en QGIS.
+        """
 
+        if not obj:
+            QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el servicio XYZ")
+            return
 
+        # Asegurarnos de tener la URL base sin parámetros
+        url_base = servicio.split("?")[0]
 
+        # La plantilla de URL XYZ debe tener {z}, {x}, {y} o {-y}
+        # Si el servicio no la tiene, la añadimos
+        if "{z}" not in url_base:
+            if not url_base.endswith("/"):
+                url_base += "/"
+            url_base += "{z}/{x}/{y}.png"
+
+        # Construcción del URI para QGIS
+        uri = (
+            f"http-header:referer="
+            f"&type=xyz"
+            f"&url={url_base}"
+            f"&zmax=19"
+            f"&zmin=0"
+        )
+
+        layer_name = obj.get("nombre") or "Capa XYZ"
+
+        layer = QgsRasterLayer(uri, layer_name, "wms")
+
+        if layer.isValid():
+            QgsProject.instance().addMapLayer(layer)
+        else:
+            QMessageBox.warning(self.dlg, "Error", f"No se pudo cargar la capa XYZ:\n{layer_name}")
+            print(f"No se pudo cargar la capa: {obj}")
 
 
     def filtrar_tabla_xyz(self):
-        """Filtra la tabla de WMTS por texto en las columnas Organismo y Nombre."""
+        """Filtra la tabla de TMS por texto en las columnas Organismo y Nombre."""
         texto = self.dlg.lineEditBuscar_XYZ.text().lower()
         tabla = self.dlg.tableWidget_XYZ
 
@@ -486,7 +532,7 @@ class CargarServiciosWorker(QThread):
                         datos_json_r["datos"].get("loc", []),
                         datos_json_r["datos"].get("pve", []),
                     ]
-                elif self.tab == "WMS":
+                elif self.tab == "WMTS":
                     datos_tab = [
                         datos_json_r["datos"].get("est", []),
                         datos_json_r["datos"].get("aut", []),
