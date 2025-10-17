@@ -123,7 +123,7 @@ class serviciosIDEE2QGIS:
             self.progress.setWindowModality(Qt.WindowModal)
             self.progress.show()
 
-            # Lanzar threads para WMS y WMTS
+            # Lanzar threads para obtener listado de servicios
             self.worker_wms = CargarServiciosWorker("WMS", [URL_WMS_est, URL_WMS_aut, URL_WMS_loc, URL_WMS_pve])
             self.worker_wms.resultado.connect(self.rellenar_tabla)
             self.worker_wms.start()
@@ -131,6 +131,12 @@ class serviciosIDEE2QGIS:
             self.worker_wmts = CargarServiciosWorker("WMTS", [URL_WMTS])
             self.worker_wmts.resultado.connect(self.rellenar_tabla)
             self.worker_wmts.start()
+
+            self.worker_xyz = CargarServiciosWorker("TMSXYZ", [URL_XYZ])
+            self.worker_xyz.resultado.connect(self.rellenar_tabla)
+            self.worker_xyz.start()
+
+
         else:
             self.dlg.show()
 
@@ -223,6 +229,9 @@ class serviciosIDEE2QGIS:
             self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_WMTS(capas,servicio, progress))
             self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
             self.worker.start()
+        
+        elif tab == "TMSXYZ":
+            pass
 
 
         else:
@@ -269,8 +278,6 @@ class serviciosIDEE2QGIS:
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
     
-    
-
     def _on_capas_cargadas_WMTS(self, capas, servicio, progress):
         """Se llama cuando el worker ha terminado de obtener las capas WMTS"""
         progress.close()  # cerrar el diálogo de espera
@@ -304,10 +311,6 @@ class serviciosIDEE2QGIS:
                 else:
                     print(f"No se pudo cargar la capa: {capa}")
 
-
-
-
-
     def filtrar_tabla_wmts(self):
         """Filtra la tabla de WMTS por texto en las columnas Organismo y Nombre."""
         texto = self.dlg.lineEditBuscar_WMTS.text().lower()
@@ -328,10 +331,6 @@ class serviciosIDEE2QGIS:
 
 
 
-
-    def obtener_capas_XYZ(self, servicio):
-        capas = []
-        return capas
 
     def filtrar_tabla_xyz(self):
         """Filtra la tabla de WMTS por texto en las columnas Organismo y Nombre."""
@@ -487,16 +486,28 @@ class CargarServiciosWorker(QThread):
                         datos_json_r["datos"].get("loc", []),
                         datos_json_r["datos"].get("pve", []),
                     ]
-                else:  # WMTS
+                elif self.tab == "WMS":
                     datos_tab = [
                         datos_json_r["datos"].get("est", []),
                         datos_json_r["datos"].get("aut", []),
                         datos_json_r["datos"].get("loc", []),
                         datos_json_r["datos"].get("pve", []),
                     ]
+                elif self.tab == "TMSXYZ":
+                    datos_tab = [
+                        datos_json_r["datos"].get("est", []),
+                        datos_json_r["datos"].get("aut", []),
+                        datos_json_r["datos"].get("loc", []),
+                        datos_json_r["datos"].get("pve", []),
+                    ]
+                else:
+                    pass
+
                 datos_completos.extend(datos_tab)
+
             except Exception as e:
                 print(f"Error descargando {url}: {e}")
+
         self.resultado.emit(self.tab, datos_completos)
 
 class CargarCapasWMSWorker(QThread):
@@ -625,6 +636,5 @@ class CargarCapasWMTSWorker(QThread):
                             "format": fmt.text or ""
                         })
         return capas
-
 
 
