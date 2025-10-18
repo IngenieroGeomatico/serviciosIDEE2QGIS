@@ -23,7 +23,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>7</number>
+    <number>6</number>
    </property>
    <widget class="QWidget" name="WMS">
     <attribute name="title">
@@ -384,15 +384,68 @@
      </column>
     </widget>
    </widget>
-   <widget class="QWidget" name="tab_2">
+   <widget class="QWidget" name="OGCAPI">
     <attribute name="title">
-     <string>Página</string>
+     <string>OGCAPI</string>
     </attribute>
-   </widget>
-   <widget class="QWidget" name="tab">
-    <attribute name="title">
-     <string>Página</string>
-    </attribute>
+    <widget class="QTableWidget" name="tableWidget_OGCAPI">
+     <property name="geometry">
+      <rect>
+       <x>15</x>
+       <y>51</y>
+       <width>740</width>
+       <height>410</height>
+      </rect>
+     </property>
+     <column>
+      <property name="text">
+       <string>añadir a mapa</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Organismo</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Nombre</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>URL</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>tipo</string>
+      </property>
+     </column>
+    </widget>
+    <widget class="QLineEdit" name="lineEditBuscar_OGCAPI">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>10</y>
+       <width>620</width>
+       <height>30</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_7">
+     <property name="geometry">
+      <rect>
+       <x>18</x>
+       <y>16</y>
+       <width>110</width>
+       <height>18</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Texto a buscar:</string>
+     </property>
+    </widget>
    </widget>
   </widget>
  </widget>

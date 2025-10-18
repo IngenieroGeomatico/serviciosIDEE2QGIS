@@ -75,6 +75,9 @@ URL_WFS = (
 URL_WCS = (
     "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wcs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
 )
+URL_OGCAPI = (
+    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-ogc-api&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+)
 
 # -----------------------------------------------------------------------------
 # Clase principal del plugin
@@ -132,6 +135,7 @@ class serviciosIDEE2QGIS:
             self.dlg.lineEditBuscar_MVT.textChanged.connect(self.filtrar_tabla_mvt)
             self.dlg.lineEditBuscar_WFS.textChanged.connect(self.filtrar_tabla_wfs)
             self.dlg.lineEditBuscar_WCS.textChanged.connect(self.filtrar_tabla_wcs)
+            self.dlg.lineEditBuscar_OGCAPI.textChanged.connect(self.filtrar_tabla_ogcapi)
             self.dlg.show()  # Abrir el diálogo inmediatamente
 
             # Crear ProgressDialog
@@ -164,6 +168,9 @@ class serviciosIDEE2QGIS:
             self.worker_wcs.resultado.connect(self.rellenar_tabla)
             self.worker_wcs.start()
 
+            self.worker_ogcapi = CargarServiciosWorker("OGCAPI", [URL_OGCAPI])
+            self.worker_ogcapi.resultado.connect(self.rellenar_tabla)
+            self.worker_ogcapi.start()
 
         else:
             self.dlg.show()
@@ -188,6 +195,10 @@ class serviciosIDEE2QGIS:
         
         elif tab == "WCS":
             tabla = self.dlg.tableWidget_WCS
+        
+        elif tab == "OGCAPI":
+            tabla = self.dlg.tableWidget_OGCAPI
+
 
         else:
             return
@@ -205,6 +216,48 @@ class serviciosIDEE2QGIS:
                     capa_2 = srv.get("capa", [])
 
                     def rellenarFila(item, nomOrg):
+                        
+                        def obtenerTipo_OGCAPI(obj):
+                            """
+                            Determina el tipo de OGC API a partir de la URL, nombre o descripción.
+                            Devuelve un string como 'Features', 'Maps', 'Coverages', 'Tiles', etc.
+                            """
+                            url = obj.get("url", "").lower()
+                            nombre = obj.get("name", "").lower()
+
+                            tipo = ""
+
+                            # Detectar por la URL
+                            if "features" in url:
+                                tipo = "Features"
+                            elif "coverages" in url:
+                                tipo = "Coverages"
+                            elif "maps" in url:
+                                tipo = "Maps"
+                            elif "processes" in url:
+                                tipo = "Processes"
+                            elif "tiles" in url:
+                                tipo = "Tiles"
+
+                            # Si no se detectó, intentar por nombre o descripción
+                            if not tipo:
+                                if any(k in nombre for k in ["feature", "features"]):
+                                    tipo = "Features"
+                                elif any(k in nombre for k in ["coverage", "coverages"]):
+                                    tipo = "Coverages"
+                                elif any(k in nombre for k in ["map", "maps"]):
+                                    tipo = "Maps"
+                                elif any(k in nombre for k in ["process", "processes"]):
+                                    tipo = "Processes"
+                                elif any(k in nombre for k in ["tile", "tiles"]):
+                                    tipo = "Tiles"
+
+                            # genérico
+                            if not tipo:
+                                tipo = "Desconocido"
+
+                            return tipo
+
                         row = tabla.rowCount()
                         tabla.insertRow(row)
                         nombre = item.get("name", "")
@@ -212,18 +265,32 @@ class serviciosIDEE2QGIS:
                         servicio = item.get("url", "")
                         masInfo = item.get("urlInfo", "")
                         btn = QPushButton("Añadir a mapa")
+
                         obj={
                             "nombre": nombre,
                             "capa": servicioCap,
                             "url": servicio,
                             "masInfo": masInfo,
+                            "tipo": tab
                         }
+                        if tab == "OGCAPI":
+                            obj["masInfo"]  = obtenerTipo_OGCAPI(obj)
+                            masInfo = obj["masInfo"]
+
+                            if masInfo == "Desconocido" or masInfo == "Features":
+                                btn.setDisabled(False)
+                            else:
+                                btn.setDisabled(True)
+                            
+
                         tabla.setCellWidget(row, 0, btn)
                         btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t, obj))
                         tabla.setItem(row, 1, QTableWidgetItem(nomOrg))
                         tabla.setItem(row, 2, QTableWidgetItem(nombre))
                         tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
+
                         if masInfo:
+                            print(obj["masInfo"] )
                             tabla.setItem(row, 4, QTableWidgetItem(masInfo))
 
                     if capa_2:
@@ -247,7 +314,8 @@ class serviciosIDEE2QGIS:
             (not self.worker_wmts.isRunning()) and
             (not self.worker_mvt.isRunning()) and
             (not self.worker_wfs.isRunning()) and
-            (not self.worker_wcs.isRunning())
+            (not self.worker_wcs.isRunning()) and
+            (not self.worker_ogcapi.isRunning())
             ):
             self.progress.close()
 
@@ -305,6 +373,16 @@ class serviciosIDEE2QGIS:
 
             self.worker = CargarCapasWCSWorker(servicio)
             self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_WCS(capas,servicio, progress))
+            self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
+            self.worker.start()
+        
+        elif tab == "OGCAPI":
+            progress = QProgressDialog("Buscando capas OGCAPI...", "Cancelar", 0, 0, self.dlg)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+
+            self.worker = CargarCapasOGCAPIWorker(servicio,obj)
+            self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_OGCAPI(capas,servicio, progress))
             self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
             self.worker.start()
 
@@ -572,7 +650,7 @@ class serviciosIDEE2QGIS:
             QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el WCS")
             return
 
-        dialog = SeleccionarCapasDialog_WFS(capas, parent=self.dlg)
+        dialog = SeleccionarCapasDialog_WCS(capas, parent=self.dlg)
         if dialog.exec_():
             capas_elegidas = dialog.capas_seleccionadas()
             for capa in capas_elegidas:
@@ -615,6 +693,65 @@ class serviciosIDEE2QGIS:
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
 
+
+
+    def _on_capas_cargadas_OGCAPI(self, capas, servicio, progress):
+        """Se llama cuando el worker ha terminado de obtener las capas OGCAPI Features"""
+        progress.close()
+
+        if not capas:
+            QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el OGC API Features")
+            return
+
+        dialog = SeleccionarCapasDialog_OGCAPI(capas, parent=self.dlg)
+        if dialog.exec_():
+            capas_elegidas = dialog.capas_seleccionadas()
+            for capa in capas_elegidas:
+                typename = capa['identifier'].strip()
+                title = capa['title'].strip()
+                if not typename:
+                    print(f"Capa sin identifier válido: {capa}")
+                    continue
+
+                # Quitar barra final y "/collections" si viene incluida
+                url_base = servicio.rstrip("/")
+                if url_base.lower().endswith("/collections"):
+                    url_base = url_base[: -len("/collections")]
+
+                # URI para el proveedor 'oapif'
+                uri = (
+                    f"url={url_base} "
+                    f"typename={typename} "
+                    f"restrictToRequestBBOX=1 "
+                    f"pageSize=1000 "
+                    f"maxNumFeatures=10000"
+                )
+
+                # Crear layer con proveedor OGC API Features
+                layer = QgsVectorLayer(uri, title, "oapif")
+
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    print(f"Capa OGCAPI Features añadida: {typename}")
+                else:
+                    print(f"No se pudo cargar la capa: {typename}")
+                    print("URI usada:", uri)
+
+
+    def filtrar_tabla_ogcapi(self):
+        """Filtra la tabla de OGCAPI por texto en las columnas Organismo y Nombre."""
+        texto = self.dlg.lineEditBuscar_OGCAPI.text().lower()
+        tabla = self.dlg.tableWidget_OGCAPI
+
+        for row in range(tabla.rowCount()):
+            item_org = tabla.item(row, 1)   # columna Organismo
+            item_nombre = tabla.item(row, 2)  # columna Nombre / Descripción
+
+            texto_org = item_org.text().lower() if item_org else ""
+            texto_nombre = item_nombre.text().lower() if item_nombre else ""
+
+            visible = (texto in texto_org) or (texto in texto_nombre)
+            tabla.setRowHidden(row, not visible)
 
 
 
@@ -1074,8 +1211,6 @@ class CargarCapasWFSWorker(QThread):
         return capas
 
 
-
-
 class SeleccionarCapasDialog_WCS(QDialog):
     def __init__(self, capas, parent=None):
         super().__init__(parent)
@@ -1222,5 +1357,128 @@ class CargarCapasWCSWorker(QThread):
                     "abstract": abstract,
                     "format": fmt
                 })
+
+        return capas
+
+
+class SeleccionarCapasDialog_OGCAPI(QDialog):
+    def __init__(self, capas, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Seleccionar capas OGCAPI")
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Tabla de capas
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Identificador", "Título",  "Descripción"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(0, 200)
+        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(2, 300)
+
+        # Llenar tabla
+        self.table.setRowCount(len(capas))
+        for row, capa in enumerate(capas):
+            identifier = capa.get("identifier", "")
+            titulo = capa.get("title", "")
+            descripcion = capa.get("abstract", "")
+            self.table.setItem(row, 0, QTableWidgetItem(identifier))
+            self.table.setItem(row, 1, QTableWidgetItem(titulo))
+            self.table.setItem(row, 2, QTableWidgetItem(descripcion))
+
+        layout.addWidget(self.table)
+
+        # Botones OK / Cancelar
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
+    def capas_seleccionadas(self):
+        """Devuelve lista con los 'identifier' de las capas seleccionadas"""
+        capas = []
+        for item in self.table.selectionModel().selectedRows():
+            row = item.row()
+            identifier = self.table.item(row, 0).text()
+            title = self.table.item(row, 1).text()
+            format = self.table.item(row, 2).text()
+            obj={
+                "identifier": identifier,
+                "title":title,
+                "format":format
+            }
+            capas.append(obj)
+        return capas
+
+class CargarCapasOGCAPIWorker(QThread):
+    terminado = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, servicio, obj):
+        super().__init__()
+        self.servicio = servicio
+        self.obj = obj
+
+    def run(self):
+        try:
+            if self.obj["masInfo"] == "Features" or self.obj["masInfo"] == "Desconocido":
+                capas = self.obtener_capas_ogcapi_features(self.servicio)
+                self.terminado.emit(capas)
+            else:
+                self.terminado.emit({})
+        except Exception as e:
+            self.error.emit(str(e))
+        
+    def obtener_capas_ogcapi_features(self, servicio):
+        """
+        Obtiene las colecciones (capas) de un servicio OGC API Features en JSON.
+        Devuelve una lista de diccionarios:
+        [{'identifier':..., 'title':..., 'abstract':..., 'format':...}, ...]
+        """
+
+        if not servicio.lower().startswith("http"):
+            return []
+
+        # Normalizar URL: debe terminar sin barra y apuntar a la raíz del OGCAPI Features
+        if servicio.lower().endswith("/collections"):
+            url_collections = servicio
+        else:
+            url_collections = f"{servicio.rstrip('/')}/collections"
+
+
+        try:
+            response = requests.get(url_collections, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as e:
+            QMessageBox.warning(None, "Error", f"No se pudo acceder al OGC API Features:\n{e}")
+            return []
+        except ValueError as e:
+            QMessageBox.warning(None, "Error", f"No se pudo parsear la respuesta JSON:\n{e}")
+            return []
+
+        capas = []
+
+        # Recorrer las colecciones
+        for collection in data.get("collections", []):
+            identifier = collection.get("id", "")
+            title = collection.get("title", identifier)
+            abstract = collection.get("description", "")
+
+            capas.append({
+                "identifier": identifier,
+                "title": title,
+                "abstract": abstract,
+            })
+
+        if not capas:
+            QMessageBox.warning(None, "Error", "No se encontraron colecciones en el OGC API Features.")
 
         return capas
