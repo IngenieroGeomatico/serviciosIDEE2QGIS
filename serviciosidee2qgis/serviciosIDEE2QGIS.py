@@ -27,7 +27,7 @@ from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QMessageBox
 from qgis.PyQt.QtCore import QThread, pyqtSignal
 from qgis.PyQt.QtWidgets import QProgressDialog
 
-from qgis.core import QgsRasterLayer, QgsProject
+from qgis.core import QgsRasterLayer, QgsProject, QgsVectorTileLayer
 
 
 from qgis.PyQt.QtWidgets import (
@@ -65,6 +65,9 @@ URL_WMTS = (
 )
 URL_XYZ= (
     "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-rts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+)
+URL_VectorTile = (
+    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-vts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
 )
 
 # -----------------------------------------------------------------------------
@@ -140,6 +143,10 @@ class serviciosIDEE2QGIS:
             self.worker_xyz.resultado.connect(self.rellenar_tabla)
             self.worker_xyz.start()
 
+            self.worker_mvt = CargarServiciosWorker("MVT", [URL_VectorTile])
+            self.worker_mvt.resultado.connect(self.rellenar_tabla)
+            self.worker_mvt.start()
+
 
         else:
             self.dlg.show()
@@ -155,6 +162,9 @@ class serviciosIDEE2QGIS:
 
         elif tab == "TMSXYZ":
             tabla = self.dlg.tableWidget_XYZ
+        
+        elif tab == "MVT":
+            tabla = self.dlg.tableWidget_MVT
 
         else:
             return
@@ -177,17 +187,21 @@ class serviciosIDEE2QGIS:
                         nombre = item.get("name", "")
                         servicioCap = item.get("capa", "")
                         servicio = item.get("url", "")
+                        masInfo = item.get("urlInfo", "")
                         btn = QPushButton("Añadir a mapa")
                         obj={
                             "nombre": nombre,
                             "capa": servicioCap,
-                            "url": servicio
+                            "url": servicio,
+                            "masInfo": masInfo,
                         }
                         tabla.setCellWidget(row, 0, btn)
                         btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t, obj))
                         tabla.setItem(row, 1, QTableWidgetItem(nomOrg))
                         tabla.setItem(row, 2, QTableWidgetItem(nombre))
                         tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
+                        if masInfo:
+                            tabla.setItem(row, 4, QTableWidgetItem(masInfo))
 
                     if capa_2:
                         rellenarFila(srv, nombre_org)
@@ -207,7 +221,8 @@ class serviciosIDEE2QGIS:
         # Cerrar el progress si ambos workers han terminado
         if ((not self.worker_xyz.isRunning()) and 
             (not self.worker_wms.isRunning()) and 
-            (not self.worker_wmts.isRunning())):
+            (not self.worker_wmts.isRunning()) and
+            (not self.worker_mvt.isRunning())):
             self.progress.close()
 
 
@@ -243,6 +258,9 @@ class serviciosIDEE2QGIS:
         
         elif tab == "TMSXYZ":
             self._on_capas_cargadas_XYZ(obj, servicio)
+        
+        elif tab == "MVT":
+            self._on_capas_cargadas_MVT(obj, servicio)
 
 
         else:
@@ -337,7 +355,6 @@ class serviciosIDEE2QGIS:
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
 
-
     def _on_capas_cargadas_XYZ(self, obj, servicio):
         """
         Se llama cuando el worker ha terminado de obtener las capas XYZ.
@@ -377,11 +394,65 @@ class serviciosIDEE2QGIS:
             QMessageBox.warning(self.dlg, "Error", f"No se pudo cargar la capa XYZ:\n{layer_name}")
             print(f"No se pudo cargar la capa: {obj}")
 
-
     def filtrar_tabla_xyz(self):
         """Filtra la tabla de TMS por texto en las columnas Organismo y Nombre."""
         texto = self.dlg.lineEditBuscar_XYZ.text().lower()
         tabla = self.dlg.tableWidget_XYZ
+
+        for row in range(tabla.rowCount()):
+            item_org = tabla.item(row, 1)   # columna Organismo
+            item_nombre = tabla.item(row, 2)  # columna Nombre / Descripción
+
+            texto_org = item_org.text().lower() if item_org else ""
+            texto_nombre = item_nombre.text().lower() if item_nombre else ""
+
+            visible = (texto in texto_org) or (texto in texto_nombre)
+            tabla.setRowHidden(row, not visible)
+
+    def _on_capas_cargadas_MVT(self, obj, servicio):
+        """
+        Se llama cuando el worker ha terminado de obtener las capas MVT.
+        Carga la capa vectorial (MVT) en QGIS.
+        """
+
+        if not obj:
+            QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el servicio MVT")
+            return
+
+        # Asegurarnos de tener la URL base sin parámetros
+        url_base = servicio.split("?")[0]
+
+        # Asegurarnos de que la URL tenga la plantilla {z}/{y}/{x}
+        if "{z}" not in url_base:
+            if not url_base.endswith("/"):
+                url_base += "/"
+            url_base += "{z}/{y}/{x}.pbf"
+
+        # Construcción del URI para QGIS (según formato xyzvectortiles)
+        uri = (
+            f"type=xyz"
+            f"&url={url_base}"
+            f"&zmax=18"
+            f"&zmin=0"
+            f"&http-header:referer="
+        )
+
+        layer_name = obj.get("nombre") or "Capa MVT"
+
+        # Cargar como capa de vector tiles
+        layer = QgsVectorTileLayer(uri, layer_name)
+
+        if layer.isValid():
+            QgsProject.instance().addMapLayer(layer)
+            print(f"Capa MVT cargada correctamente: {layer_name}")
+        else:
+            QMessageBox.warning(self.dlg, "Error", f"No se pudo cargar la capa MVT:\n{layer_name}")
+            print(f"No se pudo cargar la capa MVT: {obj}")
+
+    def filtrar_tabla_mvt(self):
+        """Filtra la tabla de MVT por texto en las columnas Organismo y Nombre."""
+        texto = self.dlg.lineEditBuscar_MVT.text().lower()
+        tabla = self.dlg.tableWidget_MVT
 
         for row in range(tabla.rowCount()):
             item_org = tabla.item(row, 1)   # columna Organismo
@@ -540,6 +611,13 @@ class CargarServiciosWorker(QThread):
                         datos_json_r["datos"].get("pve", []),
                     ]
                 elif self.tab == "TMSXYZ":
+                    datos_tab = [
+                        datos_json_r["datos"].get("est", []),
+                        datos_json_r["datos"].get("aut", []),
+                        datos_json_r["datos"].get("loc", []),
+                        datos_json_r["datos"].get("pve", []),
+                    ]
+                elif self.tab == "MVT":
                     datos_tab = [
                         datos_json_r["datos"].get("est", []),
                         datos_json_r["datos"].get("aut", []),
