@@ -72,6 +72,9 @@ URL_VectorTile = (
 URL_WFS = (
     "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wfs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"    
 )
+URL_WCS = (
+    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wcs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+)
 
 # -----------------------------------------------------------------------------
 # Clase principal del plugin
@@ -128,6 +131,7 @@ class serviciosIDEE2QGIS:
             self.dlg.lineEditBuscar_XYZ.textChanged.connect(self.filtrar_tabla_xyz)
             self.dlg.lineEditBuscar_MVT.textChanged.connect(self.filtrar_tabla_mvt)
             self.dlg.lineEditBuscar_WFS.textChanged.connect(self.filtrar_tabla_wfs)
+            self.dlg.lineEditBuscar_WCS.textChanged.connect(self.filtrar_tabla_wcs)
             self.dlg.show()  # Abrir el diálogo inmediatamente
 
             # Crear ProgressDialog
@@ -156,6 +160,10 @@ class serviciosIDEE2QGIS:
             self.worker_wfs.resultado.connect(self.rellenar_tabla)
             self.worker_wfs.start()
 
+            self.worker_wcs = CargarServiciosWorker("WCS", [URL_WCS])
+            self.worker_wcs.resultado.connect(self.rellenar_tabla)
+            self.worker_wcs.start()
+
 
         else:
             self.dlg.show()
@@ -177,6 +185,9 @@ class serviciosIDEE2QGIS:
         
         elif tab == "WFS":
             tabla = self.dlg.tableWidget_WFS
+        
+        elif tab == "WCS":
+            tabla = self.dlg.tableWidget_WCS
 
         else:
             return
@@ -235,7 +246,8 @@ class serviciosIDEE2QGIS:
             (not self.worker_wms.isRunning()) and 
             (not self.worker_wmts.isRunning()) and
             (not self.worker_mvt.isRunning()) and
-            (not self.worker_wfs.isRunning())
+            (not self.worker_wfs.isRunning()) and
+            (not self.worker_wcs.isRunning())
             ):
             self.progress.close()
 
@@ -285,6 +297,16 @@ class serviciosIDEE2QGIS:
             self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_WFS(capas,servicio, progress))
             self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
             self.worker.start()
+        
+        elif tab == "WCS":
+            progress = QProgressDialog("Buscando capas en el WCS...", "Cancelar", 0, 0, self.dlg)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+
+            self.worker = CargarCapasWCSWorker(servicio)
+            self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_WCS(capas,servicio, progress))
+            self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
+            self.worker.start()
 
 
         else:
@@ -303,7 +325,6 @@ class serviciosIDEE2QGIS:
         if dialog.exec_():
             capas_elegidas = dialog.capas_seleccionadas()
             for capa in capas_elegidas:
-                print(capa)
                 uri = (
                     f"contextualWMSLegend=0&url={servicio}"
                     f"&layers={capa['name']}&styles=&format={capa['format']}&crs=EPSG:3857"
@@ -331,6 +352,7 @@ class serviciosIDEE2QGIS:
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
     
+
     def _on_capas_cargadas_WMTS(self, capas, servicio, progress):
         """Se llama cuando el worker ha terminado de obtener las capas WMTS"""
         progress.close()  # cerrar el diálogo de espera
@@ -378,6 +400,7 @@ class serviciosIDEE2QGIS:
 
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
+
 
     def _on_capas_cargadas_XYZ(self, obj, servicio):
         """
@@ -432,6 +455,7 @@ class serviciosIDEE2QGIS:
 
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
+
 
     def _on_capas_cargadas_MVT(self, obj, servicio):
         """
@@ -489,7 +513,6 @@ class serviciosIDEE2QGIS:
             tabla.setRowHidden(row, not visible)
 
 
-
     def _on_capas_cargadas_WFS(self, capas, servicio, progress):
         """Se llama cuando el worker ha terminado de obtener las capas WFS"""
         progress.close()
@@ -502,7 +525,6 @@ class serviciosIDEE2QGIS:
         if dialog.exec_():
             capas_elegidas = dialog.capas_seleccionadas()
             for capa in capas_elegidas:
-                print(capa)
                 typename = capa['identifier'].strip()
                 if not typename:
                     print(f"Capa sin identifier válido: {capa}")
@@ -540,6 +562,60 @@ class serviciosIDEE2QGIS:
 
             visible = (texto in texto_org) or (texto in texto_nombre)
             tabla.setRowHidden(row, not visible)
+
+
+    def _on_capas_cargadas_WCS(self, capas, servicio, progress):
+        """Se llama cuando el worker ha terminado de obtener las capas WCS"""
+        progress.close()
+
+        if not capas:
+            QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el WCS")
+            return
+
+        dialog = SeleccionarCapasDialog_WFS(capas, parent=self.dlg)
+        if dialog.exec_():
+            capas_elegidas = dialog.capas_seleccionadas()
+            for capa in capas_elegidas:
+                identifier = capa['identifier'].strip()
+                if not identifier:
+                    print(f"Capa sin identifier válido: {capa}")
+                    continue
+
+                url_base = servicio.split("?")[0]  # quitar parámetros GetCapabilities
+
+                # URI con formato con '&' para QgsRasterLayer WCS
+                uri = (
+                    f"dpiMode=7"
+                    f"&identifier={identifier}"
+                    f"&tilePixelRatio=0"
+                    f"&url={url_base}"
+                )
+
+                layer = QgsRasterLayer(uri, f"{identifier}", "wcs")
+
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    print(f"Capa WCS añadida: {identifier}")
+                else:
+                    print(f"No se pudo cargar la capa: {identifier}")
+                    print("URI usada:", uri)
+
+    def filtrar_tabla_wcs(self):
+        """Filtra la tabla de WCS por texto en las columnas Organismo y Nombre."""
+        texto = self.dlg.lineEditBuscar_WCS.text().lower()
+        tabla = self.dlg.tableWidget_WCS
+
+        for row in range(tabla.rowCount()):
+            item_org = tabla.item(row, 1)   # columna Organismo
+            item_nombre = tabla.item(row, 2)  # columna Nombre / Descripción
+
+            texto_org = item_org.text().lower() if item_org else ""
+            texto_nombre = item_nombre.text().lower() if item_nombre else ""
+
+            visible = (texto in texto_org) or (texto in texto_nombre)
+            tabla.setRowHidden(row, not visible)
+
+
 
 
 class CargarServiciosWorker(QThread):
@@ -869,7 +945,6 @@ class SeleccionarCapasDialog_WFS(QDialog):
 
         # Llenar tabla
         self.table.setRowCount(len(capas))
-        print(capas)
         for row, capa in enumerate(capas):
             identifier = capa.get("identifier", "")
             titulo = capa.get("title", "")
@@ -986,6 +1061,158 @@ class CargarCapasWFSWorker(QThread):
 
             identifier = name_el.text.strip() if name_el is not None and name_el.text else ""
             title = title_el.text.strip() if title_el is not None and title_el.text else ""
+            abstract = abstract_el.text.strip() if abstract_el is not None and abstract_el.text else ""
+
+            for fmt in output_formats:
+                capas.append({
+                    "identifier": identifier,
+                    "title": title,
+                    "abstract": abstract,
+                    "format": fmt
+                })
+
+        return capas
+
+
+
+
+class SeleccionarCapasDialog_WCS(QDialog):
+    def __init__(self, capas, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Seleccionar capas WCS")
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Tabla de capas
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Identificador", "Título", "formato", "Descripción"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(0, 200)
+        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(2, 200)
+        self.table.setColumnWidth(3, 300)
+
+        # Llenar tabla
+        self.table.setRowCount(len(capas))
+        for row, capa in enumerate(capas):
+            identifier = capa.get("identifier", "")
+            titulo = capa.get("title", "")
+            format = capa.get("format", "")
+            descripcion = capa.get("abstract", "")
+            self.table.setItem(row, 0, QTableWidgetItem(identifier))
+            self.table.setItem(row, 1, QTableWidgetItem(titulo))
+            self.table.setItem(row, 2, QTableWidgetItem(format))
+            self.table.setItem(row, 3, QTableWidgetItem(descripcion))
+
+        layout.addWidget(self.table)
+
+        # Botones OK / Cancelar
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
+    def capas_seleccionadas(self):
+        """Devuelve lista con los 'identifier' de las capas seleccionadas"""
+        capas = []
+        for item in self.table.selectionModel().selectedRows():
+            row = item.row()
+            identifier = self.table.item(row, 0).text()
+            format = self.table.item(row, 2).text()
+            obj={
+                "identifier": identifier,
+                "format":format
+            }
+            capas.append(obj)
+        return capas
+
+class CargarCapasWCSWorker(QThread):
+    terminado = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, servicio):
+        super().__init__()
+        self.servicio = servicio
+
+    def run(self):
+        try:
+            capas = self.obtener_capas_wcs(self.servicio)
+            self.terminado.emit(capas)
+        except Exception as e:
+            self.error.emit(str(e))
+        
+    def obtener_capas_wcs(self, servicio):
+
+
+        def obtener_output_formats(root):
+            output_formats = set()
+
+            for sf in root.iter():
+                if sf.tag.endswith('SupportedFormats'):
+                    for fmt in sf:
+                        if fmt.tag.endswith('Format') and fmt.text:
+                            output_formats.add(fmt.text.strip())
+
+            for param in root.iter():
+                if param.tag.endswith('Parameter') and param.attrib.get('name') == 'outputFormat':
+                    for val in param.iter():
+                        if val.tag.endswith('Value') and val.text:
+                            output_formats.add(val.text.strip())
+
+            if not output_formats:
+                output_formats = {"GeoTIFF", "NetCDF", "image/tiff"}
+
+            return list(output_formats)
+
+        if not servicio.lower().startswith("http"):
+            return []
+
+        params = {"SERVICE": "WCS", "REQUEST": "GetCapabilities"}
+        try:
+            response = requests.get(servicio, params=params, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            QMessageBox.warning(None, "Error", f"No se pudo acceder al WCS:\n{e}")
+            return []
+
+        try:
+            root = ET.fromstring(response.content)
+        except ET.ParseError as e:
+            QMessageBox.warning(None, "Error", f"No se pudo parsear el XML de GetCapabilities:\n{e}")
+            return []
+
+        coverages = []
+        for elem in root.iter():
+            if elem.tag.endswith('CoverageSummary') or elem.tag.endswith('CoverageDescription'):
+                coverages.append(elem)
+
+        if not coverages:
+            QMessageBox.warning(None, "Error", "No se encontraron coberturas en el WCS.")
+            return []
+
+        output_formats = obtener_output_formats(root)
+        capas = []
+
+        for cov in coverages:
+            identifier_el = title_el = abstract_el = None
+
+            for child in cov:
+                if child.tag.endswith('CoverageId') or child.tag.endswith('Identifier'):
+                    identifier_el = child
+                elif child.tag.endswith('Title'):
+                    title_el = child
+                elif child.tag.endswith('Abstract'):
+                    abstract_el = child
+
+            identifier = identifier_el.text.strip() if identifier_el is not None and identifier_el.text else ""
+            title = title_el.text.strip() if title_el is not None and title_el.text else identifier
             abstract = abstract_el.text.strip() if abstract_el is not None and abstract_el.text else ""
 
             for fmt in output_formats:
