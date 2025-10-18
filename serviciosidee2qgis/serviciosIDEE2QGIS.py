@@ -408,7 +408,8 @@ class serviciosIDEE2QGIS:
                     f"&layers={capa['name']}&styles=&format={capa['format']}&crs=EPSG:3857"
                 )
                 nombre_capa = capa['name']
-                layer = QgsRasterLayer(uri, nombre_capa, "wms")
+                title = capa['title']
+                layer = QgsRasterLayer(uri, title, "wms")
                 if layer.isValid():
                     QgsProject.instance().addMapLayer(layer)
                 else:
@@ -457,7 +458,7 @@ class serviciosIDEE2QGIS:
                     f"&url={url_base}"
                 )
 
-                layer = QgsRasterLayer(uri, f"{capa['identifier']} ({capa['format']})", "wms")
+                layer = QgsRasterLayer(uri, f"{capa['title']}", "wms")
 
                 if layer.isValid():
                     QgsProject.instance().addMapLayer(layer)
@@ -604,6 +605,7 @@ class serviciosIDEE2QGIS:
             capas_elegidas = dialog.capas_seleccionadas()
             for capa in capas_elegidas:
                 typename = capa['identifier'].strip()
+                title = capa['title'].strip()
                 if not typename:
                     print(f"Capa sin identifier válido: {capa}")
                     continue
@@ -618,7 +620,7 @@ class serviciosIDEE2QGIS:
                     f"InvertAxisOrientation=1 "
                 )
 
-                layer = QgsVectorLayer(uri, f"{typename}", "WFS")
+                layer = QgsVectorLayer(uri, f"{title}", "WFS")
 
                 if layer.isValid():
                     QgsProject.instance().addMapLayer(layer)
@@ -694,7 +696,6 @@ class serviciosIDEE2QGIS:
             tabla.setRowHidden(row, not visible)
 
 
-
     def _on_capas_cargadas_OGCAPI(self, capas, servicio, progress):
         """Se llama cuando el worker ha terminado de obtener las capas OGCAPI Features"""
         progress.close()
@@ -736,7 +737,6 @@ class serviciosIDEE2QGIS:
                 else:
                     print(f"No se pudo cargar la capa: {typename}")
                     print("URI usada:", uri)
-
 
     def filtrar_tabla_ogcapi(self):
         """Filtra la tabla de OGCAPI por texto en las columnas Organismo y Nombre."""
@@ -863,10 +863,12 @@ class SeleccionarCapasDialog_WMS(QDialog):
         for item in self.table.selectionModel().selectedRows():
             row = item.row()
             nombre = self.table.item(row, 0).text()
+            title = self.table.item(row, 1).text()
             formato = self.table.item(row, 2).text()
             obj = {
                 "name": nombre,
-                "format": formato
+                "format": formato,
+                "title": title
             }
             capas.append(obj)
         return capas
@@ -982,10 +984,12 @@ class SeleccionarCapasDialog_WMTS(QDialog):
         for item in self.table.selectionModel().selectedRows():
             row = item.row()
             identifier = self.table.item(row, 0).text()
+            title = self.table.item(row, 1).text()
             format = self.table.item(row, 2).text()
             obj={
                 "identifier": identifier,
-                "format":format
+                "format":format,
+                "title":title
             }
             capas.append(obj)
         return capas
@@ -1106,10 +1110,12 @@ class SeleccionarCapasDialog_WFS(QDialog):
         for item in self.table.selectionModel().selectedRows():
             row = item.row()
             identifier = self.table.item(row, 0).text()
+            title = self.table.item(row, 1).text()
             format = self.table.item(row, 2).text()
             obj={
                 "identifier": identifier,
-                "format":format
+                "format":format,
+                "title":title
             }
             capas.append(obj)
         return capas
