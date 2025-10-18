@@ -290,7 +290,6 @@ class serviciosIDEE2QGIS:
                         tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
 
                         if masInfo:
-                            print(obj["masInfo"] )
                             tabla.setItem(row, 4, QTableWidgetItem(masInfo))
 
                     if capa_2:
