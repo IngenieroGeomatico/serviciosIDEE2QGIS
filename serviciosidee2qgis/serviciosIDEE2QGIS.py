@@ -27,7 +27,7 @@ from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QMessageBox
 from qgis.PyQt.QtCore import QThread, pyqtSignal
 from qgis.PyQt.QtWidgets import QProgressDialog
 
-from qgis.core import QgsRasterLayer, QgsProject, QgsVectorTileLayer
+from qgis.core import QgsRasterLayer, QgsVectorLayer, QgsProject, QgsVectorTileLayer
 
 
 from qgis.PyQt.QtWidgets import (
@@ -68,6 +68,9 @@ URL_XYZ= (
 )
 URL_VectorTile = (
     "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-vts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+)
+URL_WFS = (
+    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wfs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"    
 )
 
 # -----------------------------------------------------------------------------
@@ -123,6 +126,8 @@ class serviciosIDEE2QGIS:
             self.dlg.lineEditBuscar_WMS.textChanged.connect(self.filtrar_tabla_wms)
             self.dlg.lineEditBuscar_WMTS.textChanged.connect(self.filtrar_tabla_wmts)
             self.dlg.lineEditBuscar_XYZ.textChanged.connect(self.filtrar_tabla_xyz)
+            self.dlg.lineEditBuscar_MVT.textChanged.connect(self.filtrar_tabla_mvt)
+            self.dlg.lineEditBuscar_WFS.textChanged.connect(self.filtrar_tabla_wfs)
             self.dlg.show()  # Abrir el diálogo inmediatamente
 
             # Crear ProgressDialog
@@ -147,6 +152,10 @@ class serviciosIDEE2QGIS:
             self.worker_mvt.resultado.connect(self.rellenar_tabla)
             self.worker_mvt.start()
 
+            self.worker_wfs = CargarServiciosWorker("WFS", [URL_WFS])
+            self.worker_wfs.resultado.connect(self.rellenar_tabla)
+            self.worker_wfs.start()
+
 
         else:
             self.dlg.show()
@@ -165,6 +174,9 @@ class serviciosIDEE2QGIS:
         
         elif tab == "MVT":
             tabla = self.dlg.tableWidget_MVT
+        
+        elif tab == "WFS":
+            tabla = self.dlg.tableWidget_WFS
 
         else:
             return
@@ -222,7 +234,9 @@ class serviciosIDEE2QGIS:
         if ((not self.worker_xyz.isRunning()) and 
             (not self.worker_wms.isRunning()) and 
             (not self.worker_wmts.isRunning()) and
-            (not self.worker_mvt.isRunning())):
+            (not self.worker_mvt.isRunning()) and
+            (not self.worker_wfs.isRunning())
+            ):
             self.progress.close()
 
 
@@ -261,6 +275,16 @@ class serviciosIDEE2QGIS:
         
         elif tab == "MVT":
             self._on_capas_cargadas_MVT(obj, servicio)
+        
+        elif tab == "WFS":
+            progress = QProgressDialog("Buscando capas en el WFS...", "Cancelar", 0, 0, self.dlg)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+
+            self.worker = CargarCapasWFSWorker(servicio)
+            self.worker.terminado.connect(lambda capas: self._on_capas_cargadas_WFS(capas,servicio, progress))
+            self.worker.error.connect(lambda e: (progress.close(), QMessageBox.warning(self.dlg, "Error", e)))            
+            self.worker.start()
 
 
         else:
@@ -466,6 +490,116 @@ class serviciosIDEE2QGIS:
 
 
 
+    def _on_capas_cargadas_WFS(self, capas, servicio, progress):
+        """Se llama cuando el worker ha terminado de obtener las capas WFS"""
+        progress.close()
+
+        if not capas:
+            QMessageBox.warning(self.dlg, "Error", "No se encontraron capas en el WFS")
+            return
+
+        dialog = SeleccionarCapasDialog_WFS(capas, parent=self.dlg)
+        if dialog.exec_():
+            capas_elegidas = dialog.capas_seleccionadas()
+            for capa in capas_elegidas:
+                typename = capa['identifier'].strip()
+                title = capa['title'].strip()
+                if not typename:
+                    print(f"Capa sin identifier válido: {capa}")
+                    continue
+
+                url_base = servicio.split("?")[0]  # quitar parámetros GetCapabilities
+
+                # URI con formato compatible con QgsVectorLayer WFS
+                uri = (
+                    f"url='{url_base}' "
+                    f"typename='{typename}' "
+                    f"restrictToRequestBBOX=1 "
+                )
+
+                layer = QgsVectorLayer(uri, f"{title}", "WFS")
+
+                if layer.isValid():
+                    QgsProject.instance().addMapLayer(layer)
+                    print(f"Capa WFS añadida: {title}")
+                else:
+                    print(f"No se pudo cargar la capa: {title}")
+
+    def filtrar_tabla_wfs(self):
+        """Filtra la tabla de WFS por texto en las columnas Organismo y Nombre."""
+        texto = self.dlg.lineEditBuscar_WFS.text().lower()
+        tabla = self.dlg.tableWidget_WFS
+
+        for row in range(tabla.rowCount()):
+            item_org = tabla.item(row, 1)   # columna Organismo
+            item_nombre = tabla.item(row, 2)  # columna Nombre / Descripción
+
+            texto_org = item_org.text().lower() if item_org else ""
+            texto_nombre = item_nombre.text().lower() if item_nombre else ""
+
+            visible = (texto in texto_org) or (texto in texto_nombre)
+            tabla.setRowHidden(row, not visible)
+
+
+class CargarServiciosWorker(QThread):
+    resultado = pyqtSignal(str, object)  # tab, datos_json
+
+    def __init__(self, tab, urls):
+        super().__init__()
+        self.tab = tab
+        self.urls = urls  # lista de URLs a descargar
+
+    def run(self):
+        datos_completos = []
+        for url in self.urls:
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                datos_json_r = response.json()
+                # if self.tab == "WMS":
+                #     datos_tab = [
+                #         datos_json_r["datos"].get("est", []),
+                #         datos_json_r["datos"].get("aut", []),
+                #         datos_json_r["datos"].get("loc", []),
+                #         datos_json_r["datos"].get("pve", []),
+                #     ]
+                # elif self.tab == "WMTS":
+                #     datos_tab = [
+                #         datos_json_r["datos"].get("est", []),
+                #         datos_json_r["datos"].get("aut", []),
+                #         datos_json_r["datos"].get("loc", []),
+                #         datos_json_r["datos"].get("pve", []),
+                #     ]
+                # elif self.tab == "TMSXYZ":
+                #     datos_tab = [
+                #         datos_json_r["datos"].get("est", []),
+                #         datos_json_r["datos"].get("aut", []),
+                #         datos_json_r["datos"].get("loc", []),
+                #         datos_json_r["datos"].get("pve", []),
+                #     ]
+                # elif self.tab == "MVT":
+                #     datos_tab = [
+                #         datos_json_r["datos"].get("est", []),
+                #         datos_json_r["datos"].get("aut", []),
+                #         datos_json_r["datos"].get("loc", []),
+                #         datos_json_r["datos"].get("pve", []),
+                #     ]
+                # else:
+                #     pass
+                datos_tab = [
+                        datos_json_r["datos"].get("est", []),
+                        datos_json_r["datos"].get("aut", []),
+                        datos_json_r["datos"].get("loc", []),
+                        datos_json_r["datos"].get("pve", []),
+                ]
+                datos_completos.extend(datos_tab)
+
+            except Exception as e:
+                print(f"Error descargando {url}: {e}")
+
+        self.resultado.emit(self.tab, datos_completos)
+
+
 class SeleccionarCapasDialog_WMS(QDialog):
     def __init__(self, capas, parent=None):
         super().__init__(parent)
@@ -522,117 +656,6 @@ class SeleccionarCapasDialog_WMS(QDialog):
             }
             capas.append(obj)
         return capas
-
-class SeleccionarCapasDialog_WMTS(QDialog):
-    def __init__(self, capas, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Seleccionar capas WMTS")
-        self.setMinimumWidth(700)
-        self.setMinimumHeight(400)
-
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-
-        # Tabla de capas
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Identificador", "Título", "formato", "Descripción"])
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setColumnWidth(0, 200)
-        self.table.setColumnWidth(1, 250)
-        self.table.setColumnWidth(2, 200)
-        self.table.setColumnWidth(3, 300)
-
-        # Llenar tabla
-        self.table.setRowCount(len(capas))
-        for row, capa in enumerate(capas):
-            identifier = capa.get("identifier", "")
-            titulo = capa.get("title", "")
-            format = capa.get("format", "")
-            descripcion = capa.get("abstract", "")
-            self.table.setItem(row, 0, QTableWidgetItem(identifier))
-            self.table.setItem(row, 1, QTableWidgetItem(titulo))
-            self.table.setItem(row, 2, QTableWidgetItem(format))
-            self.table.setItem(row, 3, QTableWidgetItem(descripcion))
-
-        layout.addWidget(self.table)
-
-        # Botones OK / Cancelar
-        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
-        layout.addWidget(self.buttonBox)
-
-    def capas_seleccionadas(self):
-        """Devuelve lista con los 'identifier' de las capas seleccionadas"""
-        capas = []
-        for item in self.table.selectionModel().selectedRows():
-            row = item.row()
-            identifier = self.table.item(row, 0).text()
-            format = self.table.item(row, 2).text()
-            obj={
-                "identifier": identifier,
-                "format":format
-            }
-            capas.append(obj)
-        return capas
-
-
-class CargarServiciosWorker(QThread):
-    resultado = pyqtSignal(str, object)  # tab, datos_json
-
-    def __init__(self, tab, urls):
-        super().__init__()
-        self.tab = tab
-        self.urls = urls  # lista de URLs a descargar
-
-    def run(self):
-        datos_completos = []
-        for url in self.urls:
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                datos_json_r = response.json()
-                if self.tab == "WMS":
-                    datos_tab = [
-                        datos_json_r["datos"].get("est", []),
-                        datos_json_r["datos"].get("aut", []),
-                        datos_json_r["datos"].get("loc", []),
-                        datos_json_r["datos"].get("pve", []),
-                    ]
-                elif self.tab == "WMTS":
-                    datos_tab = [
-                        datos_json_r["datos"].get("est", []),
-                        datos_json_r["datos"].get("aut", []),
-                        datos_json_r["datos"].get("loc", []),
-                        datos_json_r["datos"].get("pve", []),
-                    ]
-                elif self.tab == "TMSXYZ":
-                    datos_tab = [
-                        datos_json_r["datos"].get("est", []),
-                        datos_json_r["datos"].get("aut", []),
-                        datos_json_r["datos"].get("loc", []),
-                        datos_json_r["datos"].get("pve", []),
-                    ]
-                elif self.tab == "MVT":
-                    datos_tab = [
-                        datos_json_r["datos"].get("est", []),
-                        datos_json_r["datos"].get("aut", []),
-                        datos_json_r["datos"].get("loc", []),
-                        datos_json_r["datos"].get("pve", []),
-                    ]
-                else:
-                    pass
-
-                datos_completos.extend(datos_tab)
-
-            except Exception as e:
-                print(f"Error descargando {url}: {e}")
-
-        self.resultado.emit(self.tab, datos_completos)
 
 class CargarCapasWMSWorker(QThread):
     terminado = pyqtSignal(list)
@@ -693,6 +716,64 @@ class CargarCapasWMSWorker(QThread):
                         "format": fmt
                     })
 
+        return capas
+
+
+class SeleccionarCapasDialog_WMTS(QDialog):
+    def __init__(self, capas, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Seleccionar capas WMTS")
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Tabla de capas
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Identificador", "Título", "formato", "Descripción"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(0, 200)
+        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(2, 200)
+        self.table.setColumnWidth(3, 300)
+
+        # Llenar tabla
+        self.table.setRowCount(len(capas))
+        for row, capa in enumerate(capas):
+            identifier = capa.get("identifier", "")
+            titulo = capa.get("title", "")
+            format = capa.get("format", "")
+            descripcion = capa.get("abstract", "")
+            self.table.setItem(row, 0, QTableWidgetItem(identifier))
+            self.table.setItem(row, 1, QTableWidgetItem(titulo))
+            self.table.setItem(row, 2, QTableWidgetItem(format))
+            self.table.setItem(row, 3, QTableWidgetItem(descripcion))
+
+        layout.addWidget(self.table)
+
+        # Botones OK / Cancelar
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
+    def capas_seleccionadas(self):
+        """Devuelve lista con los 'identifier' de las capas seleccionadas"""
+        capas = []
+        for item in self.table.selectionModel().selectedRows():
+            row = item.row()
+            identifier = self.table.item(row, 0).text()
+            format = self.table.item(row, 2).text()
+            obj={
+                "identifier": identifier,
+                "format":format
+            }
+            capas.append(obj)
         return capas
 
 class CargarCapasWMTSWorker(QThread):
@@ -762,3 +843,146 @@ class CargarCapasWMTSWorker(QThread):
         return capas
 
 
+class SeleccionarCapasDialog_WFS(QDialog):
+    def __init__(self, capas, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Seleccionar capas WFS")
+        self.setMinimumWidth(700)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Tabla de capas
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Identificador", "Título", "formato", "Descripción"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(0, 200)
+        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(2, 200)
+        self.table.setColumnWidth(3, 300)
+
+        # Llenar tabla
+        self.table.setRowCount(len(capas))
+        print(capas)
+        for row, capa in enumerate(capas):
+            identifier = capa.get("identifier", "")
+            titulo = capa.get("title", "")
+            format = capa.get("format", "")
+            descripcion = capa.get("abstract", "")
+            self.table.setItem(row, 0, QTableWidgetItem(identifier))
+            self.table.setItem(row, 1, QTableWidgetItem(titulo))
+            self.table.setItem(row, 2, QTableWidgetItem(format))
+            self.table.setItem(row, 3, QTableWidgetItem(descripcion))
+
+        layout.addWidget(self.table)
+
+        # Botones OK / Cancelar
+        self.buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        layout.addWidget(self.buttonBox)
+
+    def capas_seleccionadas(self):
+        """Devuelve lista con los 'identifier' de las capas seleccionadas"""
+        capas = []
+        for item in self.table.selectionModel().selectedRows():
+            row = item.row()
+            identifier = self.table.item(row, 0).text()
+            format = self.table.item(row, 2).text()
+            obj={
+                "identifier": identifier,
+                "format":format
+            }
+            capas.append(obj)
+        return capas
+
+class CargarCapasWFSWorker(QThread):
+    terminado = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, servicio):
+        super().__init__()
+        self.servicio = servicio
+
+    def run(self):
+        try:
+            capas = self.obtener_capas_wfs(self.servicio)
+            self.terminado.emit(capas)
+        except Exception as e:
+            self.error.emit(str(e))
+        
+    def obtener_capas_wfs(self, servicio):
+        import xml.etree.ElementTree as ET
+        import requests
+        from PyQt5.QtWidgets import QMessageBox
+
+        if not servicio.lower().startswith("http"):
+            return []
+
+        params = {"SERVICE": "WFS", "REQUEST": "GetCapabilities"}
+        try:
+            response = requests.get(servicio, params=params, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            QMessageBox.warning(None, "Error", f"No se pudo acceder al WFS:\n{e}")
+            return []
+
+        try:
+            root = ET.fromstring(response.content)
+        except ET.ParseError as e:
+            QMessageBox.warning(None, "Error", f"No se pudo parsear el XML de GetCapabilities:\n{e}")
+            return []
+
+        # Buscar FeatureType
+        feature_types = [ft for ft in root.iter() if ft.tag.endswith('FeatureType')]
+        if not feature_types:
+            QMessageBox.warning(None, "Error", "No se encontraron capas en el WFS.")
+            return []
+
+        # Buscar formatos de salida dentro de la operación GetFeature
+        output_formats = []
+        for op in root.iter():
+            if op.tag.endswith('Operation') and op.attrib.get('name') == 'GetFeature':
+                for param in op:
+                    if param.tag.endswith('Parameter') and param.attrib.get('name') == 'outputFormat':
+                        for val in param:
+                            if val.tag.endswith('Value') and val.text:
+                                output_formats.append(val.text.strip())
+
+        if not output_formats:
+            output_formats = ["GML2", "GML3", "GeoJSON"]
+
+        capas = []
+        for ft in feature_types:
+            name_el = title_el = abstract_el = None
+            for child in ft:
+                if child.tag.endswith('Name'):
+                    name_el = child
+                elif child.tag.endswith('Title'):
+                    title_el = child
+                elif child.tag.endswith('Abstract'):
+                    abstract_el = child
+
+            identifier = name_el.text.strip() if name_el is not None and name_el.text else ""
+            title = title_el.text.strip() if title_el is not None and title_el.text else ""
+            abstract = abstract_el.text.strip() if abstract_el is not None and abstract_el.text else ""
+
+            for fmt in output_formats:
+                capas.append({
+                    "identifier": identifier,
+                    "title": title,
+                    "abstract": abstract,
+                    "format": fmt
+                })
+
+        if not capas:
+            QMessageBox.warning(None, "Error", "No se encontraron capas en el WFS.")
+        else:
+            print(f"Se encontraron {len(capas)} capas en total.")
+
+        return capas

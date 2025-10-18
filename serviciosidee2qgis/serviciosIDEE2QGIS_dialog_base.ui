@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>serviciosIDEE2QGIS</string>
   </property>
-  <widget class="QTabWidget" name="tabWidget_WMS">
+  <widget class="QTabWidget" name="tabWidget_IDEE">
    <property name="geometry">
     <rect>
      <x>10</x>
@@ -23,7 +23,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>3</number>
+    <number>4</number>
    </property>
    <widget class="QWidget" name="WMS">
     <attribute name="title">
@@ -268,7 +268,70 @@
      </property>
     </widget>
    </widget>
-   <widget class="QWidget" name="tab_3">
+   <widget class="QWidget" name="WFS">
+    <attribute name="title">
+     <string>WFS</string>
+    </attribute>
+    <widget class="QLabel" name="label_5">
+     <property name="geometry">
+      <rect>
+       <x>18</x>
+       <y>16</y>
+       <width>110</width>
+       <height>18</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Texto a buscar:</string>
+     </property>
+    </widget>
+    <widget class="QTableWidget" name="tableWidget_WFS">
+     <property name="geometry">
+      <rect>
+       <x>15</x>
+       <y>51</y>
+       <width>740</width>
+       <height>410</height>
+      </rect>
+     </property>
+     <column>
+      <property name="text">
+       <string>añadir a mapa</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Organismo</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Nombre</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>URL</string>
+      </property>
+     </column>
+    </widget>
+    <widget class="QLineEdit" name="lineEditBuscar_WFS">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>10</y>
+       <width>620</width>
+       <height>30</height>
+      </rect>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QWidget" name="tab">
+    <attribute name="title">
+     <string>Página</string>
+    </attribute>
+   </widget>
+   <widget class="QWidget" name="tab_2">
     <attribute name="title">
      <string>Página</string>
     </attribute>
