@@ -502,8 +502,8 @@ class serviciosIDEE2QGIS:
         if dialog.exec_():
             capas_elegidas = dialog.capas_seleccionadas()
             for capa in capas_elegidas:
+                print(capa)
                 typename = capa['identifier'].strip()
-                title = capa['title'].strip()
                 if not typename:
                     print(f"Capa sin identifier válido: {capa}")
                     continue
@@ -515,15 +515,16 @@ class serviciosIDEE2QGIS:
                     f"url='{url_base}' "
                     f"typename='{typename}' "
                     f"restrictToRequestBBOX=1 "
+                    f"InvertAxisOrientation=1 "
                 )
 
-                layer = QgsVectorLayer(uri, f"{title}", "WFS")
+                layer = QgsVectorLayer(uri, f"{typename}", "WFS")
 
                 if layer.isValid():
                     QgsProject.instance().addMapLayer(layer)
-                    print(f"Capa WFS añadida: {title}")
+                    print(f"Capa WFS añadida: {typename}")
                 else:
-                    print(f"No se pudo cargar la capa: {title}")
+                    print(f"No se pudo cargar la capa: {typename}")
 
     def filtrar_tabla_wfs(self):
         """Filtra la tabla de WFS por texto en las columnas Organismo y Nombre."""
@@ -917,9 +918,34 @@ class CargarCapasWFSWorker(QThread):
             self.error.emit(str(e))
         
     def obtener_capas_wfs(self, servicio):
-        import xml.etree.ElementTree as ET
-        import requests
-        from PyQt5.QtWidgets import QMessageBox
+        
+        def obtener_output_formats(root):
+            """
+            Devuelve una lista de formatos de salida soportados por el WFS.
+            Intenta capturar OutputFormats/Format y ows:Parameter/AllowedValues/Value.
+            """
+            output_formats = set()  # set para evitar duplicados
+
+            # 1. Formatos dentro de OutputFormats/Format
+            for of in root.iter():
+                if of.tag.endswith('OutputFormats'):
+                    for fmt in of:
+                        if fmt.tag.endswith('Format') and fmt.text:
+                            output_formats.add(fmt.text.strip())
+
+            # 2. Formatos dentro de ows:Parameter/AllowedValues/Value
+            for param in root.iter():
+                if param.tag.endswith('Parameter') and param.attrib.get('name') == 'outputFormat':
+                    for val in param.iter():
+                        if val.tag.endswith('Value') and val.text:
+                            output_formats.add(val.text.strip())
+
+            if not output_formats:
+                # fallback
+                output_formats = {"GML2", "GML3", "GeoJSON"}
+
+            return list(output_formats)
+
 
         if not servicio.lower().startswith("http"):
             return []
@@ -944,18 +970,8 @@ class CargarCapasWFSWorker(QThread):
             QMessageBox.warning(None, "Error", "No se encontraron capas en el WFS.")
             return []
 
-        # Buscar formatos de salida dentro de la operación GetFeature
-        output_formats = []
-        for op in root.iter():
-            if op.tag.endswith('Operation') and op.attrib.get('name') == 'GetFeature':
-                for param in op:
-                    if param.tag.endswith('Parameter') and param.attrib.get('name') == 'outputFormat':
-                        for val in param:
-                            if val.tag.endswith('Value') and val.text:
-                                output_formats.append(val.text.strip())
-
-        if not output_formats:
-            output_formats = ["GML2", "GML3", "GeoJSON"]
+        # Obtener formatos
+        output_formats = obtener_output_formats(root)
 
         capas = []
         for ft in feature_types:
@@ -979,10 +995,5 @@ class CargarCapasWFSWorker(QThread):
                     "abstract": abstract,
                     "format": fmt
                 })
-
-        if not capas:
-            QMessageBox.warning(None, "Error", "No se encontraron capas en el WFS.")
-        else:
-            print(f"Se encontraron {len(capas)} capas en total.")
 
         return capas
