@@ -11,8 +11,6 @@ version=0.1
 author=ingenieroGeomatico
 email= aurearagon@gmail.com 
 
-about=Provide a brief description of the plugin and its purpose.
-
 tracker=https://github.com/IngenieroGeomatico/serviciosIDEE2QGIS
 repository=https://github.com/IngenieroGeomatico/serviciosIDEE2QGIS
 # End of mandatory metadata
@@ -41,7 +39,7 @@ deprecated=False
 # plugin_dependencies=
 
 Category of the plugin: Raster, Vector, Database or Web
-# category=
+# category= Web
 
 # If the plugin can run on QGIS Server.
 server=False
