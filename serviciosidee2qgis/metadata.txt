@@ -5,8 +5,8 @@
 [general]
 name=serviciosIDEE2QGIS
 qgisMinimumVersion=3.0
-description=Este complemento permite añadir de forma rápida y sencilla servicios web (WMS, WMTS, WFS, etc.) de la Infraestructura de Datos Espaciales de España (IDEE) directamente en QGIS. Facilita el acceso a datos geográficos oficiales del IGN-CNIG y otras instituciones públicas.
-about=Con este plugin podrás explorar, filtrar y cargar servicios de la IDEE sin necesidad de introducir manualmente las URL. Ideal para usuarios que trabajan con cartografía oficial, geoinformación pública o proyectos de la administración.
+description=Este complemento permite añadir de forma rápida y sencilla servicios web (WMS, WMTS, WFS, etc.) de la Infraestructura de Datos Espaciales de España (IDEE) directamente en QGIS. Facilita el acceso a datos geográficos oficiales del IGN-CNIG y otras instituciones públicas. /n This plugin allows you to quickly and easily add web services (WMS, WMTS, WFS, etc.) from the Spanish Spatial Data Infrastructure (IDEE) directly to QGIS. It facilitates access to official geographic data from the IGN-CNIG and other public institutions.
+about=Con este plugin podrás explorar, filtrar y cargar servicios de la IDEE sin necesidad de introducir manualmente las URL. Ideal para usuarios que trabajan con cartografía oficial, geoinformación pública o proyectos de la administración. /n With this plugin, you can explore, filter, and load IDEE services without having to manually enter URLs. Ideal for users who work with official cartography, public geoinformation, or government projects.
 version=0.1
 author=ingenieroGeomatico
 email= aurearagon@gmail.com 
