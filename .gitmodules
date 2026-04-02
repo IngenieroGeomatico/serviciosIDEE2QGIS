@@ -1,0 +1,3 @@
+[submodule "serviciosidee2qgis/descarga_limites_administrativos"]
+	path = serviciosidee2qgis/descarga_limites_administrativos
+	url = https://github.com/IngenieroGeomatico/descarga_limites_administrativos
