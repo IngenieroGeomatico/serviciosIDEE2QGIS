@@ -7,6 +7,12 @@
 
 import sys
 import getpass
+try:
+    from defusedxml.xmlrpc import monkey_patch as _monkey_patch
+    _monkey_patch()
+except Exception:
+    # defusedxml not available; continue without monkey patching
+    pass
 import xmlrpc.client
 from optparse import OptionParser
 

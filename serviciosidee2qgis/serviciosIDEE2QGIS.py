@@ -42,41 +42,51 @@ import time
 import requests
 import xml.etree.ElementTree as ET
 
+# Prefer defusedxml for safe XML parsing when available
+try:
+    from defusedxml import ElementTree as _defused_ET
+    ET_fromstring = _defused_ET.fromstring
+except Exception:
+    ET_fromstring = ET.fromstring
+
 
 URL_Catalogo = "https://www.idee.es/segun-tipo-de-servicio"
+# Public instance identifier used in the IDEE URLs (not a secret)
+# Keeping it as a separate constant makes intent clear to security scanners.
+INSTANCE_TOKEN = "YZFuNrhnVi4f"
 URL_WMS_est = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?"
-    "p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?"
+    f"p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&"
     "p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&"
-    "_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=supVisWmsEst&"
-    "_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=supVisWmsEst&"
+    f"_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_WMS_aut = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=supVisWmsAut&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=supVisWmsAut&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_WMS_loc = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=supVisWmsLoc&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=supVisWmsLoc&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_WMS_pve= (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=supVisWmsPV&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"    
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=supVisWmsPV&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"    
 )
 URL_WMTS = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-wmts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-vis-wmts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_XYZ= (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-rts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-vis-rts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_VectorTile = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-vis-vts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-vis-vts&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_WFS = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wfs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"    
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-des-wfs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"    
 )
 URL_WCS = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-des-wcs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-des-wcs&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 URL_OGCAPI = (
-    "https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_id=sup-ogc-api&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_YZFuNrhnVi4f_actionName=cargaTablaSrv"
+    f"https://www.idee.es/web/idee/segun-tipo-de-servicio?p_p_id=es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_id=sup-ogc-api&_es_igncnig_dirserv72_DirectorioServiciosPortlet_INSTANCE_{INSTANCE_TOKEN}_actionName=cargaTablaSrv"
 )
 
 
@@ -767,7 +777,7 @@ class CargarServiciosWorker(QThread):
         datos_completos = []
         for url in self.urls:
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 datos_json_r = response.json()
                 # if self.tab == "WMS":
@@ -903,7 +913,7 @@ class CargarCapasWMSWorker(QThread):
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
 
-        root = ET.fromstring(response.content)
+        root = ET_fromstring(response.content)
         ns = {
             "wms": "http://www.opengis.net/wms"
         }
@@ -1027,7 +1037,7 @@ class CargarCapasWMTSWorker(QThread):
             QMessageBox.warning(self.dlg, "Error", f"No se pudo acceder al WMTS:\n{e}")
             return []
 
-        root = ET.fromstring(response.content)
+        root = ET_fromstring(response.content)
         ns = {
             "wmts": "http://www.opengis.net/wmts/1.0",
             "ows": "http://www.opengis.net/ows/1.1",
@@ -1177,7 +1187,7 @@ class CargarCapasWFSWorker(QThread):
             return []
 
         try:
-            root = ET.fromstring(response.content)
+            root = ET_fromstring(response.content)
         except ET.ParseError as e:
             QMessageBox.warning(None, "Error", f"No se pudo parsear el XML de GetCapabilities:\n{e}")
             return []
@@ -1324,7 +1334,7 @@ class CargarCapasWCSWorker(QThread):
             return []
 
         try:
-            root = ET.fromstring(response.content)
+            root = ET_fromstring(response.content)
         except ET.ParseError as e:
             QMessageBox.warning(None, "Error", f"No se pudo parsear el XML de GetCapabilities:\n{e}")
             return []
