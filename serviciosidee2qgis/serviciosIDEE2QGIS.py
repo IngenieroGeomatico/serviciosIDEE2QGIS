@@ -136,6 +136,161 @@ class serviciosIDEE2QGIS:
             self.iface.removeToolBarIcon(action)
 
     def run(self):
+
+        def procesar_cola():
+            """Gestiona la ejecución de los hilos para que vayan de dos en dos."""
+            # Mientras queden puestos libres (menos de 2 activos) y haya tareas pendientes
+            while len(self.workers_activos) < 2 and self.cola_workers:
+                # Extraemos la siguiente tarea de la cola (el primero de la lista)
+                tab, urls = self.cola_workers.pop(0)
+                
+                # Instanciamos el worker de manera dinámica
+                worker = CargarServiciosWorker(tab, urls)
+                worker.resultado.connect(rellenar_tabla)
+                
+                # Conectamos la señal de finalización nativa del QThread pasándole el propio objeto worker
+                worker.finished.connect(lambda w=worker: on_worker_finished(w))
+                
+                # Guardamos la referencia para que Python no lo elimine y lo arrancamos
+                self.workers_activos.append(worker)
+                worker.start()
+
+        def on_worker_finished(worker):
+            """Se ejecuta automáticamente cada vez que CUALQUIER worker termina su trabajo."""
+            # Sacamos el hilo completado de la lista de activos
+            if worker in self.workers_activos:
+                self.workers_activos.remove(worker)
+            
+            # Llamamos a procesar_cola para que intente meter un hilo nuevo si hay hueco
+            procesar_cola()
+            
+            # Si ya no quedan tareas en la cola ni tampoco hilos ejecutándose, cerramos el progreso
+            if not self.cola_workers and not self.workers_activos:
+                self.progress.close()
+
+        def rellenar_tabla(tab, datos_json):
+
+            if tab == "WMS":
+                tabla = self.dlg.tableWidget_WMS
+
+            elif tab == "WMTS":
+                tabla = self.dlg.tableWidget_WMTS
+
+            elif tab == "TMSXYZ":
+                tabla = self.dlg.tableWidget_XYZ
+            
+            elif tab == "MVT":
+                tabla = self.dlg.tableWidget_MVT
+            
+            elif tab == "WFS":
+                tabla = self.dlg.tableWidget_WFS
+            
+            elif tab == "WCS":
+                tabla = self.dlg.tableWidget_WCS
+            
+            elif tab == "OGCAPI":
+                tabla = self.dlg.tableWidget_OGCAPI
+
+            else:
+                return
+
+            tabla.setRowCount(0)
+
+            for nodo in datos_json:
+                for org in nodo:
+                    nombre_org = org.get("name", "")
+                    lista_servicios = org.get("listorg", org.get("listserv", []))
+
+                    for srv in lista_servicios:
+                        lista_servicios_2 = srv.get("listserv", [])
+                        lista_Servicios_2_nodos = srv.get("listsuborg", [])
+                        capa_2 = srv.get("capa", [])
+
+                        def rellenarFila(item, nomOrg):
+                            
+                            def obtenerTipo_OGCAPI(obj):
+                                url = obj.get("url", "").lower()
+                                nombre = obj.get("name", "").lower()
+                                tipo = ""
+
+                                if "features" in url:
+                                    tipo = "Features"
+                                elif "coverages" in url:
+                                    tipo = "Coverages"
+                                elif "maps" in url:
+                                    tipo = "Maps"
+                                elif "processes" in url:
+                                    tipo = "Processes"
+                                elif "tiles" in url:
+                                    tipo = "Tiles"
+
+                                if not tipo:
+                                    if any(k in nombre for k in ["feature", "features"]):
+                                        tipo = "Features"
+                                    elif any(k in nombre for k in ["coverage", "coverages"]):
+                                        tipo = "Coverages"
+                                    elif any(k in nombre for k in ["map", "maps"]):
+                                        tipo = "Maps"
+                                    elif any(k in nombre for k in ["process", "processes"]):
+                                        tipo = "Processes"
+                                    elif any(k in nombre for k in ["tile", "tiles"]):
+                                        tipo = "Tiles"
+
+                                if not tipo:
+                                    tipo = "Desconocido"
+
+                                return tipo
+
+                            row = tabla.rowCount()
+                            tabla.insertRow(row)
+                            nombre = item.get("name", "")
+                            servicioCap = item.get("capa", "").replace(" ","")
+                            servicio = item.get("url", "").replace(" ","")
+                            masInfo = item.get("urlInfo", "")
+                            btn = QPushButton("Añadir a mapa")
+
+                            obj={
+                                "nombre": nombre,
+                                "capa": servicioCap,
+                                "url": servicio,
+                                "masInfo": masInfo,
+                                "tipo": tab
+                            }
+                            if tab == "OGCAPI":
+                                obj["masInfo"]  = obtenerTipo_OGCAPI(obj)
+                                masInfo = obj["masInfo"]
+
+                                if masInfo == "Desconocido" or masInfo == "Features":
+                                    btn.setDisabled(False)
+                                else:
+                                    btn.setDisabled(True)
+                                
+
+                            tabla.setCellWidget(row, 0, btn)
+                            btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t, obj))
+                            tabla.setItem(row, 1, QTableWidgetItem(nomOrg))
+                            tabla.setItem(row, 2, QTableWidgetItem(nombre))
+                            tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
+
+                            if masInfo:
+                                tabla.setItem(row, 4, QTableWidgetItem(masInfo))
+
+                        if capa_2:
+                            rellenarFila(srv, nombre_org)
+                        elif lista_servicios_2:
+                            if srv.get("name"):
+                                nombre_org = srv.get("name", "")
+                            for srv2 in lista_servicios_2:
+                                rellenarFila(srv2, nombre_org)
+                        elif lista_Servicios_2_nodos:
+                            for srv2 in lista_Servicios_2_nodos:
+                                lista_servicios_3 = srv2.get("listserv", [])
+                                if srv2.get("name"):
+                                    nombre_org = srv2.get("name", "")
+                                for srv3 in lista_servicios_3:
+                                    rellenarFila(srv3, nombre_org)
+
+
         if self.first_start:
             self.first_start = False
             self.dlg = serviciosIDEE2QGISDialog()
@@ -151,185 +306,31 @@ class serviciosIDEE2QGIS:
 
             # Crear ProgressDialog
             self.progress = QProgressDialog("Cargando servicios IDEE...", "Cancelar", 0, 0, self.dlg)
-            self.progress.setWindowModality(Qt.WindowModal)
+            self.progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             self.progress.show()
 
-            # Lanzar threads para obtener listado de servicios
-            self.worker_wms = CargarServiciosWorker("WMS", [URL_WMS_est, URL_WMS_aut, URL_WMS_loc, URL_WMS_pve])
-            self.worker_wms.resultado.connect(self.rellenar_tabla)
-            self.worker_wms.start()
-
-            self.worker_wmts = CargarServiciosWorker("WMTS", [URL_WMTS])
-            self.worker_wmts.resultado.connect(self.rellenar_tabla)
-            self.worker_wmts.start()
-
-            self.worker_xyz = CargarServiciosWorker("TMSXYZ", [URL_XYZ])
-            self.worker_xyz.resultado.connect(self.rellenar_tabla)
-            self.worker_xyz.start()
-
-            self.worker_mvt = CargarServiciosWorker("MVT", [URL_VectorTile])
-            self.worker_mvt.resultado.connect(self.rellenar_tabla)
-            self.worker_mvt.start()
-
-            self.worker_wfs = CargarServiciosWorker("WFS", [URL_WFS])
-            self.worker_wfs.resultado.connect(self.rellenar_tabla)
-            self.worker_wfs.start()
-
-            self.worker_wcs = CargarServiciosWorker("WCS", [URL_WCS])
-            self.worker_wcs.resultado.connect(self.rellenar_tabla)
-            self.worker_wcs.start()
-
-            self.worker_ogcapi = CargarServiciosWorker("OGCAPI", [URL_OGCAPI])
-            self.worker_ogcapi.resultado.connect(self.rellenar_tabla)
-            self.worker_ogcapi.start()
+            # --- NUEVA GESTIÓN DE TRABAJO EN PARALELO (MÁXIMO 2) ---
+            # 1. Definimos la cola con los datos de configuración de cada tipo de servicio
+            self.cola_workers = [
+                ("WMS", [URL_WMS_est, URL_WMS_aut, URL_WMS_loc, URL_WMS_pve]),
+                ("WMTS", [URL_WMTS]),
+                ("TMSXYZ", [URL_XYZ]),
+                ("MVT", [URL_VectorTile]),
+                ("WFS", [URL_WFS]),
+                ("WCS", [URL_WCS]),
+                ("OGCAPI", [URL_OGCAPI])
+            ]
+            
+            # 2. Lista para mantener el control de los hilos que están corriendo actualmente
+            self.workers_activos = []
+            
+            # 3. Disparamos el cargador por primera vez
+            procesar_cola()
 
         else:
             self.dlg.show()
 
-    
-    def rellenar_tabla(self, tab, datos_json):
-
-        if tab == "WMS":
-            tabla = self.dlg.tableWidget_WMS
-
-        elif tab == "WMTS":
-            tabla = self.dlg.tableWidget_WMTS
-
-        elif tab == "TMSXYZ":
-            tabla = self.dlg.tableWidget_XYZ
         
-        elif tab == "MVT":
-            tabla = self.dlg.tableWidget_MVT
-        
-        elif tab == "WFS":
-            tabla = self.dlg.tableWidget_WFS
-        
-        elif tab == "WCS":
-            tabla = self.dlg.tableWidget_WCS
-        
-        elif tab == "OGCAPI":
-            tabla = self.dlg.tableWidget_OGCAPI
-
-
-        else:
-            return
-
-        tabla.setRowCount(0)
-
-        for nodo in datos_json:
-            for org in nodo:
-                nombre_org = org.get("name", "")
-                lista_servicios = org.get("listorg", org.get("listserv", []))
-
-                for srv in lista_servicios:
-                    lista_servicios_2 = srv.get("listserv", [])
-                    lista_Servicios_2_nodos = srv.get("listsuborg", [])
-                    capa_2 = srv.get("capa", [])
-
-                    def rellenarFila(item, nomOrg):
-                        
-                        def obtenerTipo_OGCAPI(obj):
-                            """
-                            Determina el tipo de OGC API a partir de la URL, nombre o descripción.
-                            Devuelve un string como 'Features', 'Maps', 'Coverages', 'Tiles', etc.
-                            """
-                            url = obj.get("url", "").lower()
-                            nombre = obj.get("name", "").lower()
-
-                            tipo = ""
-
-                            # Detectar por la URL
-                            if "features" in url:
-                                tipo = "Features"
-                            elif "coverages" in url:
-                                tipo = "Coverages"
-                            elif "maps" in url:
-                                tipo = "Maps"
-                            elif "processes" in url:
-                                tipo = "Processes"
-                            elif "tiles" in url:
-                                tipo = "Tiles"
-
-                            # Si no se detectó, intentar por nombre o descripción
-                            if not tipo:
-                                if any(k in nombre for k in ["feature", "features"]):
-                                    tipo = "Features"
-                                elif any(k in nombre for k in ["coverage", "coverages"]):
-                                    tipo = "Coverages"
-                                elif any(k in nombre for k in ["map", "maps"]):
-                                    tipo = "Maps"
-                                elif any(k in nombre for k in ["process", "processes"]):
-                                    tipo = "Processes"
-                                elif any(k in nombre for k in ["tile", "tiles"]):
-                                    tipo = "Tiles"
-
-                            # genérico
-                            if not tipo:
-                                tipo = "Desconocido"
-
-                            return tipo
-
-                        row = tabla.rowCount()
-                        tabla.insertRow(row)
-                        nombre = item.get("name", "")
-                        servicioCap = item.get("capa", "")
-                        servicio = item.get("url", "")
-                        masInfo = item.get("urlInfo", "")
-                        btn = QPushButton("Añadir a mapa")
-
-                        obj={
-                            "nombre": nombre,
-                            "capa": servicioCap,
-                            "url": servicio,
-                            "masInfo": masInfo,
-                            "tipo": tab
-                        }
-                        if tab == "OGCAPI":
-                            obj["masInfo"]  = obtenerTipo_OGCAPI(obj)
-                            masInfo = obj["masInfo"]
-
-                            if masInfo == "Desconocido" or masInfo == "Features":
-                                btn.setDisabled(False)
-                            else:
-                                btn.setDisabled(True)
-                            
-
-                        tabla.setCellWidget(row, 0, btn)
-                        btn.clicked.connect(lambda checked, s=servicio, t=tab: self.anadir_a_mapa(s, t, obj))
-                        tabla.setItem(row, 1, QTableWidgetItem(nomOrg))
-                        tabla.setItem(row, 2, QTableWidgetItem(nombre))
-                        tabla.setItem(row, 3, QTableWidgetItem(servicioCap))
-
-                        if masInfo:
-                            tabla.setItem(row, 4, QTableWidgetItem(masInfo))
-
-                    if capa_2:
-                        rellenarFila(srv, nombre_org)
-                    elif lista_servicios_2:
-                        if srv.get("name"):
-                            nombre_org = srv.get("name", "")
-                        for srv2 in lista_servicios_2:
-                            rellenarFila(srv2, nombre_org)
-                    elif lista_Servicios_2_nodos:
-                        for srv2 in lista_Servicios_2_nodos:
-                            lista_servicios_3 = srv2.get("listserv", [])
-                            if srv2.get("name"):
-                                nombre_org = srv2.get("name", "")
-                            for srv3 in lista_servicios_3:
-                                rellenarFila(srv3, nombre_org)
-
-        # Cerrar el progress si ambos workers han terminado
-        if ((not self.worker_xyz.isRunning()) and 
-            (not self.worker_wms.isRunning()) and 
-            (not self.worker_wmts.isRunning()) and
-            (not self.worker_mvt.isRunning()) and
-            (not self.worker_wfs.isRunning()) and
-            (not self.worker_wcs.isRunning()) and
-            (not self.worker_ogcapi.isRunning())
-            ):
-            self.progress.close()
-
-
     # -------------------------------------------------------------------------
     # Método para descargar y rellenar la tabla
     # -------------------------------------------------------------------------
@@ -342,7 +343,7 @@ class serviciosIDEE2QGIS:
 
         if tab == "WMS":
             progress = QProgressDialog("Buscando capas en el WMS...", "Cancelar", 0, 0, self.dlg)
-            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.show()
 
             self.worker = CargarCapasWMSWorker(servicio)
@@ -352,7 +353,7 @@ class serviciosIDEE2QGIS:
 
         elif tab == "WMTS":
             progress = QProgressDialog("Buscando capas en el WMTS...", "Cancelar", 0, 0, self.dlg)
-            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.show()
 
             self.worker = CargarCapasWMTSWorker(servicio)
@@ -368,7 +369,7 @@ class serviciosIDEE2QGIS:
         
         elif tab == "WFS":
             progress = QProgressDialog("Buscando capas en el WFS...", "Cancelar", 0, 0, self.dlg)
-            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.show()
 
             self.worker = CargarCapasWFSWorker(servicio)
@@ -378,7 +379,7 @@ class serviciosIDEE2QGIS:
         
         elif tab == "WCS":
             progress = QProgressDialog("Buscando capas en el WCS...", "Cancelar", 0, 0, self.dlg)
-            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.show()
 
             self.worker = CargarCapasWCSWorker(servicio)
@@ -388,7 +389,7 @@ class serviciosIDEE2QGIS:
         
         elif tab == "OGCAPI":
             progress = QProgressDialog("Buscando capas OGCAPI...", "Cancelar", 0, 0, self.dlg)
-            progress.setWindowModality(Qt.WindowModal)
+            progress.setWindowModality(Qt.WindowModality.ApplicationModal)
             progress.show()
 
             self.worker = CargarCapasOGCAPIWorker(servicio,obj)
@@ -399,6 +400,7 @@ class serviciosIDEE2QGIS:
 
         else:
             return
+
 
     def _on_capas_cargadas_WMS(self, capas, servicio, progress):
         """Se llama cuando el worker ha terminado de obtener las capas WMS"""
@@ -780,36 +782,6 @@ class CargarServiciosWorker(QThread):
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 datos_json_r = response.json()
-                # if self.tab == "WMS":
-                #     datos_tab = [
-                #         datos_json_r["datos"].get("est", []),
-                #         datos_json_r["datos"].get("aut", []),
-                #         datos_json_r["datos"].get("loc", []),
-                #         datos_json_r["datos"].get("pve", []),
-                #     ]
-                # elif self.tab == "WMTS":
-                #     datos_tab = [
-                #         datos_json_r["datos"].get("est", []),
-                #         datos_json_r["datos"].get("aut", []),
-                #         datos_json_r["datos"].get("loc", []),
-                #         datos_json_r["datos"].get("pve", []),
-                #     ]
-                # elif self.tab == "TMSXYZ":
-                #     datos_tab = [
-                #         datos_json_r["datos"].get("est", []),
-                #         datos_json_r["datos"].get("aut", []),
-                #         datos_json_r["datos"].get("loc", []),
-                #         datos_json_r["datos"].get("pve", []),
-                #     ]
-                # elif self.tab == "MVT":
-                #     datos_tab = [
-                #         datos_json_r["datos"].get("est", []),
-                #         datos_json_r["datos"].get("aut", []),
-                #         datos_json_r["datos"].get("loc", []),
-                #         datos_json_r["datos"].get("pve", []),
-                #     ]
-                # else:
-                #     pass
                 datos_tab = [
                         datos_json_r["datos"].get("est", []),
                         datos_json_r["datos"].get("aut", []),
